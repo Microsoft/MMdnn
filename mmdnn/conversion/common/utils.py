@@ -6,6 +6,7 @@
 from __future__ import division
 import os
 import sys
+import stat
 import numpy as np
 from six import text_type, binary_type, integer_types
 import mmdnn.conversion.common.IR.graph_pb2 as graph_pb2
@@ -190,6 +191,29 @@ def _multi_thread_download(url, file_name, file_size, thread_count):
 
     return file_name
 
+def is_within_directory(base_dir, target_path):
+    base_dir = os.path.realpath(base_dir) + os.sep
+    target_path = os.path.realpath(target_path) + os.sep
+    return target_path.startswith(base_dir)
+
+def check_tar_file(directory, tarf):
+    for member in tarf.getmembers():
+        if member.islnk():
+            raise ValueError(f"Hard link detected in archive: {member.name}.")
+        if member.issym():
+            raise ValueError(f"Symbolic link detected in archive: {member.name}.")
+        member_path = os.path.join(directory, member.name)
+        if not is_within_directory(directory, member_path):
+            raise ValueError(f"Path traversal detected: {member.name}.")
+
+def check_zip_file(directory, zipf):
+    for info in zipf.infolist():
+        perm = info.external_attr >> 16
+        if stat.S_ISLNK(perm):
+            raise ValueError(f"Symbolic link detected in archive: {info.filename}.")
+        target_path = os.path.join(directory, info.filename)
+        if not is_within_directory(directory, target_path):
+            raise ValueError(f"Path traversal detected: {info.filename}.")
 
 def download_file(url, directory='./', local_fname=None, force_write=False, auto_unzip=False, compre_type=''):
     """Download the data from source url, unless it's already here.
@@ -229,30 +253,23 @@ def download_file(url, directory='./', local_fname=None, force_write=False, auto
         if ret.endswith(".tar.gz") or ret.endswith(".tgz"):
             try:
                 import tarfile
-                tar = tarfile.open(ret)
-                for name in tar.getnames():
-                    if not (os.path.realpath(os.path.join(directory, name))+ os.sep).startswith(os.path.realpath(directory) + os.sep):
-                        raise ValueError('The decompression path does not match the current path. For more info: https://docs.python.org/3/library/tarfile.html#tarfile.TarFile.extractall')
-                tar.extractall(directory)
-                tar.close()
+                with tarfile.open(ret) as tarf:
+                    check_tar_file(directory, tarf)
+                    tarf.extractall(directory)
             except ValueError:
                 raise
-            except:
-                print("Unzip file [{}] failed.".format(ret))
-
+            except Exception as e:
+                print(f"Failed to decompress file: {ret} - {e}")
         elif ret.endswith('.zip'):
             try:
                 import zipfile
-                zip_ref = zipfile.ZipFile(ret, 'r')
-                for name in zip_ref.namelist():
-                    if not (os.path.realpath(os.path.join(directory, name))+ os.sep).startswith(os.path.realpath(directory) + os.sep):
-                        raise ValueError('The decompression path does not match the current path. For more info: https://docs.python.org/3/library/zipfile.html?highlight=zipfile#zipfile.ZipFile.extractall')
-                zip_ref.extractall(directory)
-                zip_ref.close()
+                with zipfile.ZipFile(ret, 'r') as zipf:
+                    check_zip_file(directory, zipf)
+                    zipf.extractall(directory)
             except ValueError:
                 raise
-            except:
-                print("Unzip file [{}] failed.".format(ret))
+            except Exception as e:
+                print(f"Failed to decompress file: {ret} - {e}")
     return ret
 """
     r = requests.head(url)
