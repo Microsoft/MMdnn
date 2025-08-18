@@ -72,7 +72,7 @@ class PytorchParser(Parser):
     def __init__(self, model_file_name, input_shape):
         super(PytorchParser, self).__init__()
         if not os.path.exists(model_file_name):
-            print("Pytorch model file [{}] is not found.".format(model_file_name))
+            print("PyTorch model file [{}] is not found.".format(model_file_name))
             assert False
         # test
 
@@ -128,7 +128,7 @@ class PytorchParser(Parser):
         new_dim = shape.dim.add()
 
         if not shape_pytorch:
-            print("Warning: Pytorch cannot inference outputshape of \"{}\" with operator \"{}\". Setting outputshape manually in json file is alternative .".format(source_node.name, source_node.type))
+            print("Warning: PyTorch cannot inference outputshape of \"{}\" with operator \"{}\". Setting outputshape manually in json file is alternative .".format(source_node.name, source_node.type))
             IR_node.attr["_output_shapes"].list.shape.extend([shape])
             return 
 
